@@ -217,21 +217,15 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             }
             setContextMenu(null);
 
-            // Camera 클립 예외 처리: 첫 클릭 시 자동 Edit 모드 돌입
-            if (clip.category === 'Camera' || trackId === 'camera') {
-                if (setTargetClip) setTargetClip({ trackId, category: 'Camera', ...clip });
-                if (setPanelMode) setPanelMode('edit');
-                if (setActiveTab) setActiveTab('camera');
-            } else {
-                // 클릭한 클립이 Camera가 아니면서,
-                // 현재 일반 클립(Action 등)의 Edit/Replace 창이 열려있을 때만 패널을 닫습니다.
-                if ((panelMode === 'edit' || panelMode === 'replace') && targetClip?.category !== 'Camera') {
-                    if (closeEditPanel) {
-                        closeEditPanel();
-                    } else {
-                        if (setPanelMode) setPanelMode('default');
-                        if (setTargetClip) setTargetClip(null);
-                    }
+            // 클릭한 클립과 무관하게, 
+            // 현재 일반 클립(Action 등)의 Edit/Replace 창이 열려있을 때만 패널을 닫습니다.
+            // Camera 클립의 Edit 창이 열려있는 상태라면 다른 클립을 클릭해도 유지합니다.
+            if ((panelMode === 'edit' || panelMode === 'replace') && targetClip?.category !== 'Camera') {
+                if (closeEditPanel) {
+                    closeEditPanel();
+                } else {
+                    if (setPanelMode) setPanelMode('default');
+                    if (setTargetClip) setTargetClip(null);
                 }
             }
         }

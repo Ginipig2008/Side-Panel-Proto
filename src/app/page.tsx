@@ -3,10 +3,11 @@
 import Layout from "@/components/Layout";
 import { User, Eye, Camera, Users, Video, Grid, LogOut } from "lucide-react";
 
-const Viewport = ({ tracks = [], errorMessage = null, panelMode = 'default', targetClip = null, isCameraView = false, setFocusedTrackId, closeEditPanel, setPanelMode, setTargetClip }: any) => {
+const Viewport = ({ tracks = [], errorMessage = null, panelMode = 'default', targetClip = null, isCameraView = false, setFocusedTrackId, closeEditPanel, setPanelMode, setTargetClip, selectedClip }: any) => {
   const characters = tracks.filter((t: any) => t.type !== 'system');
 
   // 방어 코드: Layout에서 계산된 isCameraView 이외에도 Viewport 내부에서 직접 targetClip을 보고 안전하게 재계산합니다.
+  const isSelectedClipCamera = selectedClip && selectedClip.id === targetClip?.id;
   const isCamera = isCameraView || ((panelMode === 'edit' || panelMode === 'replace') && (targetClip?.category === 'Camera' || targetClip?.trackId === 'camera'));
 
   return (

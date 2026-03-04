@@ -443,11 +443,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         {activeTab && (
           <aside className="w-[320px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col relative z-20 transition-all duration-300">
             {/* Dim Overlay for Camera Edit/Replace */}
-            {(panelMode === 'edit' || panelMode === 'replace') && targetClip?.category === 'Camera' && selectedClip && selectedClip.category !== 'Camera' && (
+            {(panelMode === 'edit' || panelMode === 'replace') && targetClip?.category === 'Camera' && selectedClip && selectedClip.id !== (targetClip.clipId || targetClip.id) && (
               <div
                 className="absolute inset-0 bg-black/60 z-50 cursor-pointer flex items-center justify-center backdrop-blur-sm transition-all"
                 onClick={() => {
-                  if (setSelectedClip) setSelectedClip(targetClip);
+                  if (setSelectedClip) setSelectedClip({ ...targetClip, id: targetClip.clipId || targetClip.id });
                 }}
               >
                 <div className="bg-black/50 px-4 py-2 rounded-full text-white font-medium text-sm drop-shadow-md border border-white/10 hover:bg-black/70 transition-colors">
@@ -541,7 +541,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   pendingClip,
                   setPendingClip,
                   isCameraView,
-                  closeEditPanel
+                  closeEditPanel,
+                  selectedClip
                 } as any);
               }
               return child;
@@ -575,7 +576,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         setSelectedClip={setSelectedClip}
         closeEditPanel={closeEditPanel}
       />
-    </div>
+    </div >
   );
 };
 
