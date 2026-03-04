@@ -191,44 +191,53 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             setPlayheadPos(clip.startPos);
         }
 
-        if (selectedClip?.id === clip.id) {
-            // 이미 선택된 클립(두 번째 클릭 이상)인 경우 컨텍스트 메뉴 표시
-            const menuWidth = 128; // w-32
-            const menuHeight = 112; // approx 3 items
-            let x = e.clientX;
-            let y = e.clientY;
+        // 왼쪽 클릭은 선택만 수행하고 컨텍스트 메뉴는 닫습니다.
+        if (setSelectedClip) {
+            setSelectedClip({ trackId, ...clip });
+        }
+        setContextMenu(null);
 
-            if (typeof window !== 'undefined') {
-                if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
-                if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
-            }
-
-            setContextMenu({
-                visible: true,
-                x,
-                y,
-                trackId,
-                clipId: clip.id
-            });
-        } else {
-            // 첫 번째 클릭: 컨텍스트 메뉴 닫고 선택 상태 설정
-            if (setSelectedClip) {
-                setSelectedClip({ trackId, ...clip });
-            }
-            setContextMenu(null);
-
-            // 클릭한 클립과 무관하게, 
-            // 현재 일반 클립(Action 등)의 Edit/Replace 창이 열려있을 때만 패널을 닫습니다.
-            // Camera 클립의 Edit 창이 열려있는 상태라면 다른 클립을 클릭해도 유지합니다.
-            if ((panelMode === 'edit' || panelMode === 'replace') && targetClip?.category !== 'Camera') {
-                if (closeEditPanel) {
-                    closeEditPanel();
-                } else {
-                    if (setPanelMode) setPanelMode('default');
-                    if (setTargetClip) setTargetClip(null);
-                }
+        // 클릭한 클립과 무관하게, 
+        // 현재 일반 클립(Action 등)의 Edit/Replace 창이 열려있을 때만 패널을 닫습니다.
+        // Camera 클립의 Edit 창이 열려있는 상태라면 다른 클립을 클릭해도 유지합니다.
+        if ((panelMode === 'edit' || panelMode === 'replace') && targetClip?.category !== 'Camera') {
+            if (closeEditPanel) {
+                closeEditPanel();
+            } else {
+                if (setPanelMode) setPanelMode('default');
+                if (setTargetClip) setTargetClip(null);
             }
         }
+    };
+
+    const handleClipContextMenu = (e: React.MouseEvent<HTMLDivElement>, trackId: string, clip: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (setPlayheadPos) {
+            setPlayheadPos(clip.startPos);
+        }
+        if (setSelectedClip) {
+            setSelectedClip({ trackId, ...clip });
+        }
+
+        const menuWidth = 128; // w-32
+        const menuHeight = 112; // approx 3 items
+        let x = e.clientX;
+        let y = e.clientY;
+
+        if (typeof window !== 'undefined') {
+            if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
+            if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+        }
+
+        setContextMenu({
+            visible: true,
+            x,
+            y,
+            trackId,
+            clipId: clip.id
+        });
     };
 
     const handleContextMenuClick = (action: string) => {
@@ -340,6 +349,10 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                 className="flex-1 overflow-auto custom-scrollbar relative bg-gray-50/20"
                 ref={timeAreaRef}
                 onScroll={handleScroll}
+                onContextMenu={(e) => {
+                    // Prevent browser default context menu inside timeline area
+                    e.preventDefault();
+                }}
             >
                 {/* 
                   3450px = Left Track List (250px) + Time Area Grid (3200px)
@@ -463,6 +476,9 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                         e.stopPropagation();
                                                         handleClipClick(e, track.id, clip);
                                                     }}
+                                                    onContextMenu={(e) => {
+                                                        handleClipContextMenu(e, track.id, clip);
+                                                    }}
                                                     className={`absolute h-[70%] bg-blue-500 rounded text-xs text-white font-medium flex items-center px-2 cursor-pointer border shadow-sm overflow-hidden pointer-events-auto top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClip?.id === clip.id ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-110 shadow-lg z-40 border-transparent' : 'border-blue-600 z-10 hover:brightness-110'}`}
                                                     style={{
                                                         left: `${clip.startPos * GRID_WIDTH}px`,
@@ -582,6 +598,9 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             handleClipClick(e, subTrackId, clip);
+                                                        }}
+                                                        onContextMenu={(e) => {
+                                                            handleClipContextMenu(e, subTrackId, clip);
                                                         }}
                                                         className={`absolute h-[70%] bg-[#7C5CFC] rounded text-[10px] text-white font-medium flex items-center px-2 cursor-pointer border shadow-sm overflow-hidden top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClip?.id === clip.id ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-125 shadow-lg z-40 border-transparent' : 'border-[#6A4DF0] z-10 hover:brightness-110'}`}
                                                         style={{
