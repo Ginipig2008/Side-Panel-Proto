@@ -53,6 +53,7 @@ const ActionPanel: React.FC<ActionPanelProps> = ({ onClose, onAddClip, onReplace
 
             findNodePath(actionData, []);
             if (foundPath.length > 0) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setActionPath(foundPath);
             }
         }

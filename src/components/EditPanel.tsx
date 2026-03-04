@@ -106,12 +106,7 @@ const EditPanel: React.FC<EditPanelProps> = ({ targetClip, closeEditPanel, onApp
 
             {/* 5. 하단 고정 버튼 */}
             <div className="absolute bottom-0 w-full p-4 bg-white border-t border-gray-100 flex gap-2 z-10">
-                <button
-                    onClick={closeEditPanel}
-                    className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 transition-colors"
-                >
-                    Cancel
-                </button>
+
                 {category !== 'Action' && category !== 'Look' && (
                     <button
                         onClick={() => { }}
