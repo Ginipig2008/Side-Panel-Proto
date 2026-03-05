@@ -19,12 +19,26 @@ interface LayoutProps {
   children?: ReactNode;
 }
 
+const DEFAULT_TRACKS = [
+  { id: 'camera', name: 'Camera', type: 'system', clips: [] }
+];
+
+const normalizeTracks = (value: any): any[] => {
+  if (!Array.isArray(value)) return DEFAULT_TRACKS;
+
+  const trackList = value.filter((track) => track && typeof track === 'object' && typeof track.id === 'string');
+  const hasCameraTrack = trackList.some((track) => track.id === 'camera');
+
+  if (hasCameraTrack) return trackList;
+  return [DEFAULT_TRACKS[0], ...trackList];
+};
 
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const MIN_TIMELINE_HEIGHT = 180;
   const MAX_TIMELINE_HEIGHT = 600;
   const TIMELINE_HEIGHT_STORAGE_KEY = 'cinev.timelineHeight';
+  const TIMELINE_TRACKS_STORAGE_KEY = 'cinev.timelineTracks';
   const [activeTab, _setActiveTab] = useState<string | null>('default');
   const [previousTab, setPreviousTab] = useState<string | null>('default');
 
@@ -50,6 +64,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [lastFocusedCharId, setLastFocusedCharId] = useState<string | null>(null);
   const [timelineHeight, setTimelineHeight] = useState(300);
   const timelineHeightLoadedRef = useRef(false);
+  const timelineTracksLoadedRef = useRef(false);
   const isTimelineResizingRef = useRef(false);
   const timelineResizeStartYRef = useRef(0);
   const timelineResizeStartHeightRef = useRef(300);
@@ -129,9 +144,30 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   };
 
-  const [tracks, setTracks] = useState<any[]>([
-    { id: 'camera', name: 'Camera', type: 'system', clips: [] }
-  ]);
+  const [tracks, setTracks] = useState<any[]>(DEFAULT_TRACKS);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(TIMELINE_TRACKS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setTracks(normalizeTracks(parsed));
+      }
+    } catch {
+      // Ignore localStorage parsing/access failures
+    } finally {
+      timelineTracksLoadedRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!timelineTracksLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(TIMELINE_TRACKS_STORAGE_KEY, JSON.stringify(tracks));
+    } catch {
+      // Ignore localStorage access failures
+    }
+  }, [tracks]);
 
   const handleAddCharacter = (name?: string) => {
     const newCharId = `char-${Date.now()}`;
