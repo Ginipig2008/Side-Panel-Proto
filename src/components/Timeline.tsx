@@ -126,6 +126,9 @@ const isPlayheadInClip = (clips: any[], pos: number) => {
 };
 
 const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharacter, onDeleteCharacter, playheadPos = 0, setPlayheadPos, focusedTrackId, setFocusedTrackId, panelMode = 'default', onDeleteClip, onEditClip, onReplaceClip, onAddClip, pendingClip, handleAddDialogueClip, allDialogueClips, setActiveTab, setPanelMode, targetClip, setTargetClip, onReplaceClipRequest, onClipEditRequest, selectedClip, setSelectedClip, closeEditPanel, timelineHeight = 300, onBatchUpdateClips }) => {
+    const TIMELINE_FPS = 30;
+    const CLIP_MOVE_STEP_FRAMES = 30;
+    const CLIP_MOVE_STEP_SECONDS = CLIP_MOVE_STEP_FRAMES / TIMELINE_FPS;
     const {
         tracks, clips, pixelsPerSecond,
         addTrack, addClip, setPixelsPerSecond,
@@ -138,10 +141,13 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
     const scrubStateRef = useRef<{ mode: 'ruler' | 'canvas', element: HTMLDivElement } | null>(null);
     const [contextMenu, setContextMenu] = React.useState<{ visible: boolean, x: number, y: number, trackId: string, clipId: string } | null>(null);
     const [selectedClipKeys, setSelectedClipKeys] = React.useState<string[]>([]);
+    const [snapGuidePos, setSnapGuidePos] = React.useState<number | null>(null);
+    const [previewClipUpdates, setPreviewClipUpdates] = React.useState<Record<string, { trackId: string, clipId: string, startPos?: number, length?: number }>>({});
     const dragStateRef = useRef<{
         mode: 'move' | 'resize-left' | 'resize-right';
         startClientX: number;
         snapshots: { trackId: string, clipId: string, startPos: number, length: number }[];
+        baseTrackClips: { clipId: string, startPos: number, length: number }[];
         moved: boolean;
     } | null>(null);
 
@@ -159,7 +165,17 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
 
     // 타임라인 한 칸(Grid) 너비를 상수처럼 정의 (zoom에 따라 동적 변경)
     const GRID_WIDTH = pixelsPerSecond;
+    const quantizeToClipStep = (value: number) => {
+        return Math.round(value / CLIP_MOVE_STEP_SECONDS) * CLIP_MOVE_STEP_SECONDS;
+    };
     const makeClipKey = (trackId: string, clipId: string) => `${trackId}::${clipId}`;
+    const toPreviewUpdateMap = (updates: { trackId: string, clipId: string, startPos?: number, length?: number }[]) => {
+        const map: Record<string, { trackId: string, clipId: string, startPos?: number, length?: number }> = {};
+        for (const update of updates) {
+            map[makeClipKey(update.trackId, update.clipId)] = update;
+        }
+        return map;
+    };
 
     const findClipByTrackIdAndClipId = (trackId: string, clipId: string) => {
         for (const track of mainTracks) {
@@ -178,6 +194,88 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             }
         }
         return null;
+    };
+
+    const getTrackClips = (trackId: string) => {
+        const result: { clipId: string, startPos: number, length: number }[] = [];
+        for (const track of mainTracks) {
+            if (track.id === trackId && track.clips) {
+                for (const clip of track.clips) {
+                    result.push({ clipId: clip.id, startPos: clip.startPos, length: clip.length });
+                }
+            }
+            if (track.type === 'character' && track.subTracks) {
+                for (const sub of track.subTracks) {
+                    const subTrackId = `${track.id}-${sub.name}`;
+                    if (subTrackId === trackId && sub.clips) {
+                        for (const clip of sub.clips) {
+                            result.push({ clipId: clip.id, startPos: clip.startPos, length: clip.length });
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+    };
+
+    const getSnappedPosition = (
+        proposedStartPos: number,
+        clipLength: number,
+        trackId: string,
+        excludeClipIds: string[],
+        threshold: number = 1
+    ) => {
+        const candidates: number[] = [0];
+        const clipsOnTrack = getTrackClips(trackId);
+        for (const clip of clipsOnTrack) {
+            if (excludeClipIds.includes(clip.clipId)) continue;
+            candidates.push(clip.startPos, clip.startPos + clip.length);
+        }
+
+        let snappedStartPos = proposedStartPos;
+        let guidePos: number | null = null;
+
+        for (const candidate of candidates) {
+            if (Math.abs(proposedStartPos - candidate) <= threshold) {
+                snappedStartPos = candidate;
+                guidePos = candidate;
+                break;
+            }
+            const proposedEnd = proposedStartPos + clipLength;
+            if (Math.abs(proposedEnd - candidate) <= threshold) {
+                snappedStartPos = candidate - clipLength;
+                guidePos = candidate;
+                break;
+            }
+        }
+
+        return { snappedStartPos: Math.max(0, snappedStartPos), guidePos };
+    };
+
+    const getSingleTrackRippleUpdates = (
+        trackId: string,
+        movedClipId: string,
+        movedStartPos: number,
+        movedLength: number,
+        baseTrackClips: { clipId: string, startPos: number, length: number }[]
+    ) => {
+        const updates: { clipId: string, startPos: number }[] = [];
+        const sorted = baseTrackClips
+            .filter((clip) => clip.clipId !== movedClipId)
+            .sort((a, b) => a.startPos - b.startPos);
+
+        let boundary = movedStartPos + movedLength;
+        for (const clip of sorted) {
+            const clipEnd = clip.startPos + clip.length;
+            if (clip.startPos < boundary && clipEnd > movedStartPos) {
+                updates.push({ clipId: clip.clipId, startPos: boundary });
+                boundary += clip.length;
+            } else if (clip.startPos >= boundary) {
+                break;
+            }
+        }
+
+        return updates;
     };
 
     const clearSelection = () => {
@@ -206,6 +304,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             mode,
             startClientX: e.clientX,
             snapshots,
+            baseTrackClips: snapshots.length > 0 ? getTrackClips(snapshots[0].trackId) : [],
             moved: false
         };
     };
@@ -414,17 +513,52 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
         const handleMouseMove = (e: MouseEvent) => {
             if (!dragStateRef.current || !onBatchUpdateClips) return;
             const deltaX = e.clientX - dragStateRef.current.startClientX;
-            const deltaGrid = Math.round(deltaX / GRID_WIDTH);
+            const unitDelta = deltaX / GRID_WIDTH;
+            const deltaGrid = unitDelta >= 0 ? Math.floor(unitDelta) : Math.ceil(unitDelta);
             const drag = dragStateRef.current;
 
             if (drag.mode === 'move') {
-                const updates = drag.snapshots.map((snap) => ({
-                    trackId: snap.trackId,
-                    clipId: snap.clipId,
-                    startPos: Math.max(0, snap.startPos + deltaGrid),
-                    length: snap.length
-                }));
-                onBatchUpdateClips(updates);
+                const isSingleClipMove = drag.snapshots.length === 1;
+                let guidePos: number | null = null;
+                const updates = drag.snapshots.map((snap) => {
+                    let nextStartPos = Math.max(0, snap.startPos + deltaGrid);
+                    if (isSingleClipMove) {
+                        const snapped = getSnappedPosition(nextStartPos, snap.length, snap.trackId, [snap.clipId]);
+                        nextStartPos = snapped.snappedStartPos;
+                        guidePos = snapped.guidePos;
+                    }
+                    nextStartPos = Math.max(0, quantizeToClipStep(nextStartPos));
+
+                    return {
+                        trackId: snap.trackId,
+                        clipId: snap.clipId,
+                        startPos: nextStartPos,
+                        length: snap.length
+                    };
+                });
+
+                // Core import from timeline proto: single track ripple chain reaction
+                if (isSingleClipMove) {
+                    const moved = updates[0];
+                    const baseSnap = drag.snapshots[0];
+                    if (moved && baseSnap) {
+                        const rippleUpdates = getSingleTrackRippleUpdates(
+                            moved.trackId,
+                            moved.clipId,
+                            moved.startPos ?? baseSnap.startPos,
+                            moved.length ?? baseSnap.length,
+                            drag.baseTrackClips
+                        ).map((r) => ({
+                            trackId: moved.trackId,
+                            clipId: r.clipId,
+                            startPos: r.startPos
+                        }));
+                        updates.push(...rippleUpdates);
+                    }
+                }
+
+                setSnapGuidePos(guidePos);
+                setPreviewClipUpdates(toPreviewUpdateMap(updates));
                 if (deltaGrid !== 0) drag.moved = true;
                 return;
             }
@@ -433,24 +567,64 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             if (!snap) return;
 
             if (drag.mode === 'resize-right') {
-                const nextLength = Math.max(1, snap.length + deltaGrid);
-                onBatchUpdateClips([{ trackId: snap.trackId, clipId: snap.clipId, length: nextLength }]);
+                let nextLength = Math.max(CLIP_MOVE_STEP_SECONDS, snap.length + deltaGrid);
+                const snapped = getSnappedPosition(snap.startPos, nextLength, snap.trackId, [snap.clipId]);
+                const snappedEnd = snapped.snappedStartPos + nextLength;
+                nextLength = Math.max(CLIP_MOVE_STEP_SECONDS, quantizeToClipStep(snappedEnd - snap.startPos));
+                setSnapGuidePos(snapped.guidePos);
+
+                const updates: { trackId: string, clipId: string, startPos?: number, length?: number }[] = [
+                    { trackId: snap.trackId, clipId: snap.clipId, length: nextLength }
+                ];
+
+                const rippleUpdates = getSingleTrackRippleUpdates(
+                    snap.trackId,
+                    snap.clipId,
+                    snap.startPos,
+                    nextLength,
+                    drag.baseTrackClips
+                ).map((r) => ({
+                    trackId: snap.trackId,
+                    clipId: r.clipId,
+                    startPos: r.startPos
+                }));
+                updates.push(...rippleUpdates);
+
+                setPreviewClipUpdates(toPreviewUpdateMap(updates));
                 if (nextLength !== snap.length) drag.moved = true;
                 return;
             }
 
             const proposedStart = snap.startPos + deltaGrid;
-            const clampedStart = Math.max(0, proposedStart);
+            const snapped = getSnappedPosition(proposedStart, snap.length, snap.trackId, [snap.clipId]);
+            let clampedStart = Math.max(0, snapped.snappedStartPos);
+            // resize-left 시 이전 클립의 끝보다 앞으로 넘어가지 않도록 제한
+            const previousClip = drag.baseTrackClips
+                .filter((clip) => clip.clipId !== snap.clipId && clip.startPos < snap.startPos)
+                .sort((a, b) => (b.startPos + b.length) - (a.startPos + a.length))[0];
+            if (previousClip) {
+                const previousClipEnd = previousClip.startPos + previousClip.length;
+                clampedStart = Math.max(previousClipEnd, clampedStart);
+            }
+            clampedStart = Math.max(0, quantizeToClipStep(clampedStart));
+
+            setSnapGuidePos(snapped.guidePos);
             const startDelta = clampedStart - snap.startPos;
-            const nextLength = Math.max(1, snap.length - startDelta);
+            const nextLength = Math.max(CLIP_MOVE_STEP_SECONDS, quantizeToClipStep(snap.length - startDelta));
             const nextStart = snap.startPos + (snap.length - nextLength);
-            onBatchUpdateClips([{ trackId: snap.trackId, clipId: snap.clipId, startPos: nextStart, length: nextLength }]);
+            setPreviewClipUpdates(toPreviewUpdateMap([{ trackId: snap.trackId, clipId: snap.clipId, startPos: nextStart, length: nextLength }]));
             if (nextStart !== snap.startPos || nextLength !== snap.length) drag.moved = true;
         };
 
         const handleMouseUp = () => {
             if (!dragStateRef.current) return;
+            const shouldCommit = dragStateRef.current.moved;
             dragStateRef.current = null;
+            if (shouldCommit && onBatchUpdateClips && Object.keys(previewClipUpdates).length > 0) {
+                onBatchUpdateClips(Object.values(previewClipUpdates));
+            }
+            setPreviewClipUpdates({});
+            setSnapGuidePos(null);
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
         };
@@ -461,7 +635,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [GRID_WIDTH, onBatchUpdateClips]);
+    }, [GRID_WIDTH, onBatchUpdateClips, previewClipUpdates]);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -576,6 +750,12 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                         className="absolute top-0 bottom-0 w-[1px] bg-red-500 z-40 pointer-events-none"
                         style={{ left: `calc(282px + ${playheadPos * pixelsPerSecond}px)` }}
                     />
+                    {snapGuidePos !== null && (
+                        <div
+                            className="absolute top-0 bottom-0 w-[1px] bg-yellow-400 z-40 pointer-events-none"
+                            style={{ left: `calc(282px + ${snapGuidePos * pixelsPerSecond}px)` }}
+                        />
+                    )}
 
                     {/* TOP HEADER ROW: Track Name & Ruler */}
                     <div className="flex flex-row w-full h-8 sticky top-0 z-50 bg-white border-b border-gray-100">
@@ -608,7 +788,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                 {[...Array(60)].map((_, i) => (
                                     <div key={i} className="flex-shrink-0 border-l border-gray-200 h-full relative" style={{ width: `${pixelsPerSecond}px` }}>
                                         <span className="absolute top-1 left-1.5 text-[9px] text-gray-400 font-mono">
-                                            {i < 10 ? `0${i}:00` : `${i}:00`}
+                                            {`${i}s`}
                                         </span>
                                         <div className="absolute bottom-0 left-[25%] h-1 w-[1px] bg-gray-200" />
                                         <div className="absolute bottom-0 left-[50%] h-1.5 w-[1px] bg-gray-300" />
@@ -684,6 +864,11 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
 
                                             {/* Render clips only for Camera track */}
                                             {track.clips?.map((clip: any) => (
+                                                (() => {
+                                                    const preview = previewClipUpdates[makeClipKey(track.id, clip.id)];
+                                                    const displayStartPos = typeof preview?.startPos === 'number' ? preview.startPos : clip.startPos;
+                                                    const displayLength = typeof preview?.length === 'number' ? preview.length : clip.length;
+                                                    return (
                                                 <div
                                                     key={clip.id}
                                                     onMouseDown={(e) => {
@@ -697,8 +882,8 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                     }}
                                                     className={`absolute h-[70%] bg-blue-500 rounded text-xs text-white font-medium flex items-center px-2 cursor-grab border shadow-sm overflow-hidden pointer-events-auto top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClipKeys.includes(makeClipKey(track.id, clip.id)) ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-110 shadow-lg z-40 border-transparent' : 'border-blue-600 z-10 hover:brightness-110'}`}
                                                     style={{
-                                                        left: `${clip.startPos * GRID_WIDTH}px`,
-                                                        width: `${clip.length * GRID_WIDTH}px`,
+                                                        left: `${displayStartPos * GRID_WIDTH}px`,
+                                                        width: `${displayLength * GRID_WIDTH}px`,
                                                     }}
                                                 >
                                                     <div
@@ -713,6 +898,8 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                         onClick={(e) => e.stopPropagation()}
                                                     />
                                                 </div>
+                                                    );
+                                                })()
                                             ))}
                                         </div>
                                     </div>
@@ -820,6 +1007,11 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
 
                                                 {/* Render clips for Sub-track */}
                                                 {sub.clips?.map((clip: any) => (
+                                                    (() => {
+                                                        const preview = previewClipUpdates[makeClipKey(subTrackId, clip.id)];
+                                                        const displayStartPos = typeof preview?.startPos === 'number' ? preview.startPos : clip.startPos;
+                                                        const displayLength = typeof preview?.length === 'number' ? preview.length : clip.length;
+                                                        return (
                                                     <div
                                                         key={clip.id}
                                                         onMouseDown={(e) => {
@@ -833,8 +1025,8 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                         }}
                                                         className={`absolute h-[70%] bg-[#7C5CFC] rounded text-[10px] text-white font-medium flex items-center px-2 cursor-grab border shadow-sm overflow-hidden top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClipKeys.includes(makeClipKey(subTrackId, clip.id)) ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-125 shadow-lg z-40 border-transparent' : 'border-[#6A4DF0] z-10 hover:brightness-110'}`}
                                                         style={{
-                                                            left: `${clip.startPos * GRID_WIDTH}px`,
-                                                            width: `${clip.length * GRID_WIDTH}px`,
+                                                            left: `${displayStartPos * GRID_WIDTH}px`,
+                                                            width: `${displayLength * GRID_WIDTH}px`,
                                                         }}
                                                     >
                                                         <div
@@ -849,6 +1041,8 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                             onClick={(e) => e.stopPropagation()}
                                                         />
                                                     </div>
+                                                        );
+                                                    })()
                                                 ))}
                                             </div>
                                         </div>
