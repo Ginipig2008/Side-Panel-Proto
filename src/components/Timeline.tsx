@@ -135,6 +135,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const leftTrackListRef = useRef<HTMLDivElement>(null);
     const timeAreaRef = useRef<HTMLDivElement>(null);
+    const scrubStateRef = useRef<{ mode: 'ruler' | 'canvas', element: HTMLDivElement } | null>(null);
     const [contextMenu, setContextMenu] = React.useState<{ visible: boolean, x: number, y: number, trackId: string, clipId: string } | null>(null);
     const [selectedClipKeys, setSelectedClipKeys] = React.useState<string[]>([]);
     const dragStateRef = useRef<{
@@ -279,6 +280,51 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
         );
     };
 
+    const updatePlayheadFromCanvasClientX = (clientX: number, canvasElement: HTMLDivElement) => {
+        if (!setPlayheadPos) return;
+        const canvasRect = canvasElement.getBoundingClientRect();
+        const localX = clientX - canvasRect.left;
+        const gridIndex = Math.floor(localX / GRID_WIDTH);
+        setPlayheadPos(Math.max(0, gridIndex));
+    };
+
+    const updatePlayheadFromRulerClientX = (clientX: number, rulerElement: HTMLDivElement) => {
+        if (!setPlayheadPos) return;
+        const rulerRect = rulerElement.getBoundingClientRect();
+        const localX = clientX - rulerRect.left - 32; // marker column width
+        const gridIndex = Math.floor(localX / GRID_WIDTH);
+        setPlayheadPos(Math.max(0, gridIndex));
+    };
+
+    const handleRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        setContextMenu(null);
+        scrubStateRef.current = { mode: 'ruler', element: e.currentTarget };
+        updatePlayheadFromRulerClientX(e.clientX, e.currentTarget);
+    };
+
+    const handleTrackCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>, trackId: string) => {
+        if (e.button !== 0) return;
+        if (e.target !== e.currentTarget) return; // only empty canvas area
+        e.preventDefault();
+
+        if (contextMenu) {
+            setContextMenu(null);
+        }
+
+        const isEditingCamera = (panelMode === 'edit' || panelMode === 'replace') && (targetClip?.category === 'Camera' || targetClip?.trackId === 'camera');
+        if (!isEditingCamera) {
+            if (setPanelMode) setPanelMode('default');
+            if (setTargetClip) setTargetClip(null);
+            clearSelection();
+        }
+
+        if (setFocusedTrackId) setFocusedTrackId(trackId);
+        scrubStateRef.current = { mode: 'canvas', element: e.currentTarget };
+        updatePlayheadFromCanvasClientX(e.clientX, e.currentTarget);
+    };
+
     const handleTrackCanvasClick = (e: React.MouseEvent<HTMLDivElement>, trackId: string) => {
         // 배경 클릭 시 컨텍스트 메뉴 닫기
         if (contextMenu) {
@@ -299,18 +345,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
 
         if (!setPlayheadPos || !timeAreaRef.current) return;
 
-        // timeAreaRef를 기준으로 정확한 클릭 X 좌표 계산 (스크롤 위치 포함)
-        const rect = timeAreaRef.current.getBoundingClientRect();
-        const x = (e.clientX - rect.left) + timeAreaRef.current.scrollLeft;
-
-        // 클릭을 허용하지 않는 좌측 헤더 영역(약 282px: [250px 텍스트 영역] + [32px 🎬 마커 영역])은 보통 여기 도달하지 않지만 
-        // 혹시 모를 오차를 위해 타임라인 시작점을 보정합니다. (현재 Ruler 기준 32px 위치부터가 0초)
-        // Canvas 안의 offset 계산이 더 정확하므로 currentTarget.getBoundingClientRect() 사용
-        const canvasRect = e.currentTarget.getBoundingClientRect();
-        const localX = e.clientX - canvasRect.left;
-
-        const gridIndex = Math.floor(localX / GRID_WIDTH);
-        setPlayheadPos(Math.max(0, gridIndex));
+        updatePlayheadFromCanvasClientX(e.clientX, e.currentTarget);
     };
 
     const handleClipContextMenu = (e: React.MouseEvent<HTMLDivElement>, trackId: string, clip: any) => {
@@ -428,6 +463,30 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
         };
     }, [GRID_WIDTH, onBatchUpdateClips]);
 
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!scrubStateRef.current) return;
+            const scrub = scrubStateRef.current;
+            if (scrub.mode === 'ruler') {
+                updatePlayheadFromRulerClientX(e.clientX, scrub.element);
+            } else {
+                updatePlayheadFromCanvasClientX(e.clientX, scrub.element);
+            }
+        };
+
+        const handleMouseUp = () => {
+            if (!scrubStateRef.current) return;
+            scrubStateRef.current = null;
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [GRID_WIDTH, setPlayheadPos]);
+
     return (
         <div className="relative w-full bg-white border-t border-gray-200 flex flex-col flex-shrink-0 z-30 overflow-hidden text-black" style={{ height: `${timelineHeight}px` }}>
             {/* Preview Protection Overlay */}
@@ -526,7 +585,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                         </div>
 
                         {/* SCROLLING RIGHT: Ruler Area */}
-                        <div className="flex-1 relative bg-white overflow-hidden flex" onClick={() => setContextMenu(null)}>
+                        <div className="flex-1 relative bg-white overflow-hidden flex" onClick={() => setContextMenu(null)} onMouseDown={handleRulerMouseDown}>
                             {/* Marker Column */}
                             <div
                                 onClick={(e) => e.stopPropagation()}
@@ -599,6 +658,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                         {/* SCROLLING RIGHT: Camera Timeline Canvas */}
                                         <div
                                             className="flex-1 relative ml-8 h-full"
+                                            onMouseDown={(e) => handleTrackCanvasMouseDown(e, track.id)}
                                             onClick={(e) => handleTrackCanvasClick(e, track.id)}
                                         >
                                             {!isPlayheadInClip(track.clips, playheadPos) && (
@@ -720,6 +780,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                             {/* SCROLLING RIGHT: Timeline Canvas */}
                                             <div
                                                 className="flex-1 relative ml-8 h-full"
+                                                onMouseDown={(e) => handleTrackCanvasMouseDown(e, subTrackId)}
                                                 onClick={(e) => handleTrackCanvasClick(e, subTrackId)}
                                             >
                                                 {!isPlayheadInClip(sub.clips, playheadPos) && (
