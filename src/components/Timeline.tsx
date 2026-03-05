@@ -116,6 +116,7 @@ interface TimelineProps {
     selectedClip?: any;
     setSelectedClip?: (clip: any) => void;
     closeEditPanel?: () => void;
+    timelineHeight?: number;
 }
 
 const isPlayheadInClip = (clips: any[], pos: number) => {
@@ -123,7 +124,7 @@ const isPlayheadInClip = (clips: any[], pos: number) => {
     return clips.some(clip => pos >= clip.startPos && pos < clip.startPos + clip.length);
 };
 
-const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharacter, onDeleteCharacter, playheadPos = 0, setPlayheadPos, focusedTrackId, setFocusedTrackId, panelMode = 'default', onDeleteClip, onEditClip, onReplaceClip, onAddClip, pendingClip, handleAddDialogueClip, allDialogueClips, setActiveTab, setPanelMode, targetClip, setTargetClip, onReplaceClipRequest, onClipEditRequest, selectedClip, setSelectedClip, closeEditPanel }) => {
+const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharacter, onDeleteCharacter, playheadPos = 0, setPlayheadPos, focusedTrackId, setFocusedTrackId, panelMode = 'default', onDeleteClip, onEditClip, onReplaceClip, onAddClip, pendingClip, handleAddDialogueClip, allDialogueClips, setActiveTab, setPanelMode, targetClip, setTargetClip, onReplaceClipRequest, onClipEditRequest, selectedClip, setSelectedClip, closeEditPanel, timelineHeight = 300 }) => {
     const {
         tracks, clips, pixelsPerSecond,
         addTrack, addClip, setPixelsPerSecond,
@@ -275,7 +276,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
     }, [focusedTrackId]);
 
     return (
-        <div className="relative w-full h-[300px] bg-white border-t border-gray-200 flex flex-col flex-shrink-0 z-30 overflow-hidden text-black">
+        <div className="relative w-full bg-white border-t border-gray-200 flex flex-col flex-shrink-0 z-30 overflow-hidden text-black" style={{ height: `${timelineHeight}px` }}>
             {/* Preview Protection Overlay */}
             {panelMode === 'preview' && (
                 <div

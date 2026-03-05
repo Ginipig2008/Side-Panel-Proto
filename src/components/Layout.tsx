@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import {
   Search,
   X
@@ -22,6 +22,9 @@ interface LayoutProps {
 
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const MIN_TIMELINE_HEIGHT = 180;
+  const MAX_TIMELINE_HEIGHT = 600;
+  const TIMELINE_HEIGHT_STORAGE_KEY = 'cinev.timelineHeight';
   const [activeTab, _setActiveTab] = useState<string | null>('default');
   const [previousTab, setPreviousTab] = useState<string | null>('default');
 
@@ -45,6 +48,76 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [focusedTrackId, setFocusedTrackId] = useState<string | null>('camera');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastFocusedCharId, setLastFocusedCharId] = useState<string | null>(null);
+  const [timelineHeight, setTimelineHeight] = useState(300);
+  const timelineHeightLoadedRef = useRef(false);
+  const isTimelineResizingRef = useRef(false);
+  const timelineResizeStartYRef = useRef(0);
+  const timelineResizeStartHeightRef = useRef(300);
+
+  const clampTimelineHeight = (height: number) => {
+    return Math.max(MIN_TIMELINE_HEIGHT, Math.min(MAX_TIMELINE_HEIGHT, height));
+  };
+
+  const handleTimelineResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    isTimelineResizingRef.current = true;
+    timelineResizeStartYRef.current = e.clientY;
+    timelineResizeStartHeightRef.current = timelineHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isTimelineResizingRef.current) return;
+
+      const deltaY = timelineResizeStartYRef.current - e.clientY;
+      const nextHeight = timelineResizeStartHeightRef.current + deltaY;
+      setTimelineHeight(clampTimelineHeight(nextHeight));
+    };
+
+    const handleMouseUp = () => {
+      if (!isTimelineResizingRef.current) return;
+      isTimelineResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(TIMELINE_HEIGHT_STORAGE_KEY);
+      if (saved) {
+        const parsed = Number(saved);
+        if (!Number.isNaN(parsed)) {
+          setTimelineHeight(clampTimelineHeight(parsed));
+        }
+      }
+    } catch {
+      // Ignore localStorage access failures
+    } finally {
+      timelineHeightLoadedRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!timelineHeightLoadedRef.current) return;
+    try {
+      window.localStorage.setItem(TIMELINE_HEIGHT_STORAGE_KEY, String(timelineHeight));
+    } catch {
+      // Ignore localStorage access failures
+    }
+  }, [timelineHeight]);
 
   const handleSetFocusedTrackId = (id: string | null) => {
     setFocusedTrackId(id);
@@ -551,7 +624,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </main>
       </div>
 
-      {/* Bottom Timeline - Fixed Height */}
+      <div
+        className="h-2 flex-shrink-0 bg-gray-100 border-t border-gray-200 cursor-row-resize flex items-center justify-center"
+        onMouseDown={handleTimelineResizeStart}
+        title="타임라인 높이 조절"
+      >
+        <div className="w-10 h-1 rounded-full bg-gray-400/70" />
+      </div>
+
+      {/* Bottom Timeline */}
       <Timeline
         tracks={tracks}
         onAddCharacter={handleAddCharacter}
@@ -575,6 +656,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         selectedClip={selectedClip}
         setSelectedClip={setSelectedClip}
         closeEditPanel={closeEditPanel}
+        timelineHeight={timelineHeight}
       />
     </div >
   );
