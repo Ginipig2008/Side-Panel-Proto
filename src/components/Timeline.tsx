@@ -117,6 +117,7 @@ interface TimelineProps {
     setSelectedClip?: (clip: any) => void;
     closeEditPanel?: () => void;
     timelineHeight?: number;
+    onBatchUpdateClips?: (updates: { trackId: string, clipId: string, startPos?: number, length?: number }[]) => void;
 }
 
 const isPlayheadInClip = (clips: any[], pos: number) => {
@@ -124,7 +125,7 @@ const isPlayheadInClip = (clips: any[], pos: number) => {
     return clips.some(clip => pos >= clip.startPos && pos < clip.startPos + clip.length);
 };
 
-const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharacter, onDeleteCharacter, playheadPos = 0, setPlayheadPos, focusedTrackId, setFocusedTrackId, panelMode = 'default', onDeleteClip, onEditClip, onReplaceClip, onAddClip, pendingClip, handleAddDialogueClip, allDialogueClips, setActiveTab, setPanelMode, targetClip, setTargetClip, onReplaceClipRequest, onClipEditRequest, selectedClip, setSelectedClip, closeEditPanel, timelineHeight = 300 }) => {
+const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharacter, onDeleteCharacter, playheadPos = 0, setPlayheadPos, focusedTrackId, setFocusedTrackId, panelMode = 'default', onDeleteClip, onEditClip, onReplaceClip, onAddClip, pendingClip, handleAddDialogueClip, allDialogueClips, setActiveTab, setPanelMode, targetClip, setTargetClip, onReplaceClipRequest, onClipEditRequest, selectedClip, setSelectedClip, closeEditPanel, timelineHeight = 300, onBatchUpdateClips }) => {
     const {
         tracks, clips, pixelsPerSecond,
         addTrack, addClip, setPixelsPerSecond,
@@ -135,6 +136,13 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
     const leftTrackListRef = useRef<HTMLDivElement>(null);
     const timeAreaRef = useRef<HTMLDivElement>(null);
     const [contextMenu, setContextMenu] = React.useState<{ visible: boolean, x: number, y: number, trackId: string, clipId: string } | null>(null);
+    const [selectedClipKeys, setSelectedClipKeys] = React.useState<string[]>([]);
+    const dragStateRef = useRef<{
+        mode: 'move' | 'resize-left' | 'resize-right';
+        startClientX: number;
+        snapshots: { trackId: string, clipId: string, startPos: number, length: number }[];
+        moved: boolean;
+    } | null>(null);
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
         if (leftTrackListRef.current) {
@@ -150,6 +158,126 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
 
     // 타임라인 한 칸(Grid) 너비를 상수처럼 정의 (zoom에 따라 동적 변경)
     const GRID_WIDTH = pixelsPerSecond;
+    const makeClipKey = (trackId: string, clipId: string) => `${trackId}::${clipId}`;
+
+    const findClipByTrackIdAndClipId = (trackId: string, clipId: string) => {
+        for (const track of mainTracks) {
+            if (track.id === trackId && track.clips) {
+                const topClip = track.clips.find((c: any) => c.id === clipId);
+                if (topClip) return topClip;
+            }
+            if (track.type === 'character' && track.subTracks) {
+                for (const sub of track.subTracks) {
+                    const subTrackId = `${track.id}-${sub.name}`;
+                    if (subTrackId === trackId && sub.clips) {
+                        const subClip = sub.clips.find((c: any) => c.id === clipId);
+                        if (subClip) return subClip;
+                    }
+                }
+            }
+        }
+        return null;
+    };
+
+    const clearSelection = () => {
+        setSelectedClipKeys([]);
+        if (setSelectedClip) setSelectedClip(null);
+    };
+
+    const closeOpenEditPanelIfNeeded = () => {
+        if ((panelMode === 'edit' || panelMode === 'replace') && targetClip?.category !== 'Camera') {
+            if (closeEditPanel) {
+                closeEditPanel();
+            } else {
+                if (setPanelMode) setPanelMode('default');
+                if (setTargetClip) setTargetClip(null);
+            }
+        }
+    };
+
+    const selectSingleClip = (trackId: string, clip: any) => {
+        setSelectedClipKeys([makeClipKey(trackId, clip.id)]);
+        if (setSelectedClip) setSelectedClip({ trackId, ...clip });
+    };
+
+    const beginClipDrag = (mode: 'move' | 'resize-left' | 'resize-right', e: React.MouseEvent<HTMLDivElement>, snapshots: { trackId: string, clipId: string, startPos: number, length: number }[]) => {
+        dragStateRef.current = {
+            mode,
+            startClientX: e.clientX,
+            snapshots,
+            moved: false
+        };
+    };
+
+    const handleClipMouseDown = (e: React.MouseEvent<HTMLDivElement>, trackId: string, clip: any) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (setPlayheadPos) setPlayheadPos(clip.startPos);
+        if (setFocusedTrackId) setFocusedTrackId(trackId);
+        setContextMenu(null);
+
+        const clipKey = makeClipKey(trackId, clip.id);
+        const isCtrlSelection = e.ctrlKey || e.metaKey;
+
+        if (isCtrlSelection) {
+            setSelectedClipKeys((prev) => {
+                const exists = prev.includes(clipKey);
+                if (exists) {
+                    const next = prev.filter((k) => k !== clipKey);
+                    if (next.length === 0 && setSelectedClip) setSelectedClip(null);
+                    return next;
+                }
+                return [...prev, clipKey];
+            });
+            if (setSelectedClip) setSelectedClip({ trackId, ...clip });
+            closeOpenEditPanelIfNeeded();
+            return;
+        }
+
+        const shouldMoveMulti = selectedClipKeys.includes(clipKey) && selectedClipKeys.length > 1;
+        const keysToMove = shouldMoveMulti ? selectedClipKeys : [clipKey];
+        const snapshots = keysToMove
+            .map((key) => {
+                const [resolvedTrackId, resolvedClipId] = key.split('::');
+                const resolvedClip = findClipByTrackIdAndClipId(resolvedTrackId, resolvedClipId);
+                if (!resolvedClip) return null;
+                return {
+                    trackId: resolvedTrackId,
+                    clipId: resolvedClipId,
+                    startPos: resolvedClip.startPos,
+                    length: resolvedClip.length
+                };
+            })
+            .filter(Boolean) as { trackId: string, clipId: string, startPos: number, length: number }[];
+
+        if (shouldMoveMulti) {
+            if (setSelectedClip) setSelectedClip({ trackId, ...clip });
+        } else {
+            selectSingleClip(trackId, clip);
+        }
+        closeOpenEditPanelIfNeeded();
+        beginClipDrag('move', e, snapshots.length > 0 ? snapshots : [{ trackId, clipId: clip.id, startPos: clip.startPos, length: clip.length }]);
+    };
+
+    const handleResizeHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>, trackId: string, clip: any, direction: 'left' | 'right') => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (setPlayheadPos) setPlayheadPos(clip.startPos);
+        if (setFocusedTrackId) setFocusedTrackId(trackId);
+        setContextMenu(null);
+        selectSingleClip(trackId, clip);
+        closeOpenEditPanelIfNeeded();
+
+        beginClipDrag(
+            direction === 'left' ? 'resize-left' : 'resize-right',
+            e,
+            [{ trackId, clipId: clip.id, startPos: clip.startPos, length: clip.length }]
+        );
+    };
 
     const handleTrackCanvasClick = (e: React.MouseEvent<HTMLDivElement>, trackId: string) => {
         // 배경 클릭 시 컨텍스트 메뉴 닫기
@@ -163,7 +291,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
         if (!isEditingCamera) {
             if (setPanelMode) setPanelMode('default');
             if (setTargetClip) setTargetClip(null);
-            if (setSelectedClip) setSelectedClip(null);
+            clearSelection();
         }
 
         // 포커스 이동 (캐릭터인 경우 Layout.tsx에서 자동으로 setLastFocusedCharId 동작함)
@@ -185,32 +313,6 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
         setPlayheadPos(Math.max(0, gridIndex));
     };
 
-    const handleClipClick = (e: React.MouseEvent<HTMLDivElement>, trackId: string, clip: any) => {
-        e.stopPropagation(); // 이벤트 버블링 방지로 배경 클릭 막기
-
-        if (setPlayheadPos) {
-            setPlayheadPos(clip.startPos);
-        }
-
-        // 왼쪽 클릭은 선택만 수행하고 컨텍스트 메뉴는 닫습니다.
-        if (setSelectedClip) {
-            setSelectedClip({ trackId, ...clip });
-        }
-        setContextMenu(null);
-
-        // 클릭한 클립과 무관하게, 
-        // 현재 일반 클립(Action 등)의 Edit/Replace 창이 열려있을 때만 패널을 닫습니다.
-        // Camera 클립의 Edit 창이 열려있는 상태라면 다른 클립을 클릭해도 유지합니다.
-        if ((panelMode === 'edit' || panelMode === 'replace') && targetClip?.category !== 'Camera') {
-            if (closeEditPanel) {
-                closeEditPanel();
-            } else {
-                if (setPanelMode) setPanelMode('default');
-                if (setTargetClip) setTargetClip(null);
-            }
-        }
-    };
-
     const handleClipContextMenu = (e: React.MouseEvent<HTMLDivElement>, trackId: string, clip: any) => {
         e.preventDefault();
         e.stopPropagation();
@@ -218,9 +320,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
         if (setPlayheadPos) {
             setPlayheadPos(clip.startPos);
         }
-        if (setSelectedClip) {
-            setSelectedClip({ trackId, ...clip });
-        }
+        selectSingleClip(trackId, clip);
 
         const menuWidth = 128; // w-32
         const menuHeight = 112; // approx 3 items
@@ -274,6 +374,59 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
             }
         }
     }, [focusedTrackId]);
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!dragStateRef.current || !onBatchUpdateClips) return;
+            const deltaX = e.clientX - dragStateRef.current.startClientX;
+            const deltaGrid = Math.round(deltaX / GRID_WIDTH);
+            const drag = dragStateRef.current;
+
+            if (drag.mode === 'move') {
+                const updates = drag.snapshots.map((snap) => ({
+                    trackId: snap.trackId,
+                    clipId: snap.clipId,
+                    startPos: Math.max(0, snap.startPos + deltaGrid),
+                    length: snap.length
+                }));
+                onBatchUpdateClips(updates);
+                if (deltaGrid !== 0) drag.moved = true;
+                return;
+            }
+
+            const snap = drag.snapshots[0];
+            if (!snap) return;
+
+            if (drag.mode === 'resize-right') {
+                const nextLength = Math.max(1, snap.length + deltaGrid);
+                onBatchUpdateClips([{ trackId: snap.trackId, clipId: snap.clipId, length: nextLength }]);
+                if (nextLength !== snap.length) drag.moved = true;
+                return;
+            }
+
+            const proposedStart = snap.startPos + deltaGrid;
+            const clampedStart = Math.max(0, proposedStart);
+            const startDelta = clampedStart - snap.startPos;
+            const nextLength = Math.max(1, snap.length - startDelta);
+            const nextStart = snap.startPos + (snap.length - nextLength);
+            onBatchUpdateClips([{ trackId: snap.trackId, clipId: snap.clipId, startPos: nextStart, length: nextLength }]);
+            if (nextStart !== snap.startPos || nextLength !== snap.length) drag.moved = true;
+        };
+
+        const handleMouseUp = () => {
+            if (!dragStateRef.current) return;
+            dragStateRef.current = null;
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [GRID_WIDTH, onBatchUpdateClips]);
 
     return (
         <div className="relative w-full bg-white border-t border-gray-200 flex flex-col flex-shrink-0 z-30 overflow-hidden text-black" style={{ height: `${timelineHeight}px` }}>
@@ -460,7 +613,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                             if (setActiveTab) setActiveTab('camera');
                                                             if (setPanelMode) setPanelMode('default');
                                                             if (setTargetClip) setTargetClip(null);
-                                                            if (setSelectedClip) setSelectedClip(null);
+                                                            clearSelection();
                                                         }}
                                                         className="flex opacity-0 group-hover:opacity-100 transition-opacity absolute left-1/2 ml-1 bg-blue-500 text-white text-[10px] font-medium px-2 py-0.5 rounded shadow-md cursor-pointer hover:bg-blue-600 whitespace-nowrap items-center pointer-events-auto"
                                                     >
@@ -473,20 +626,32 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                             {track.clips?.map((clip: any) => (
                                                 <div
                                                     key={clip.id}
+                                                    onMouseDown={(e) => {
+                                                        handleClipMouseDown(e, track.id, clip);
+                                                    }}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleClipClick(e, track.id, clip);
                                                     }}
                                                     onContextMenu={(e) => {
                                                         handleClipContextMenu(e, track.id, clip);
                                                     }}
-                                                    className={`absolute h-[70%] bg-blue-500 rounded text-xs text-white font-medium flex items-center px-2 cursor-pointer border shadow-sm overflow-hidden pointer-events-auto top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClip?.id === clip.id ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-110 shadow-lg z-40 border-transparent' : 'border-blue-600 z-10 hover:brightness-110'}`}
+                                                    className={`absolute h-[70%] bg-blue-500 rounded text-xs text-white font-medium flex items-center px-2 cursor-grab border shadow-sm overflow-hidden pointer-events-auto top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClipKeys.includes(makeClipKey(track.id, clip.id)) ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-110 shadow-lg z-40 border-transparent' : 'border-blue-600 z-10 hover:brightness-110'}`}
                                                     style={{
                                                         left: `${clip.startPos * GRID_WIDTH}px`,
                                                         width: `${clip.length * GRID_WIDTH}px`,
                                                     }}
                                                 >
+                                                    <div
+                                                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize bg-white/20 hover:bg-white/40"
+                                                        onMouseDown={(e) => handleResizeHandleMouseDown(e, track.id, clip, 'left')}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
                                                     <span className="truncate">{clip.name}</span>
+                                                    <div
+                                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-white/20 hover:bg-white/40"
+                                                        onMouseDown={(e) => handleResizeHandleMouseDown(e, track.id, clip, 'right')}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
                                                 </div>
                                             ))}
                                         </div>
@@ -583,7 +748,7 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                                 }
                                                                 if (setPanelMode) setPanelMode('default');
                                                                 if (setTargetClip) setTargetClip(null);
-                                                                if (setSelectedClip) setSelectedClip(null);
+                                                                clearSelection();
                                                             }}
                                                             className="flex opacity-0 group-hover:opacity-100 transition-opacity absolute left-1/2 ml-1 bg-blue-500 text-white text-[10px] font-medium px-2 py-0.5 rounded shadow-md cursor-pointer hover:bg-blue-600 whitespace-nowrap items-center pointer-events-auto"
                                                         >
@@ -596,20 +761,32 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
                                                 {sub.clips?.map((clip: any) => (
                                                     <div
                                                         key={clip.id}
+                                                        onMouseDown={(e) => {
+                                                            handleClipMouseDown(e, subTrackId, clip);
+                                                        }}
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            handleClipClick(e, subTrackId, clip);
                                                         }}
                                                         onContextMenu={(e) => {
                                                             handleClipContextMenu(e, subTrackId, clip);
                                                         }}
-                                                        className={`absolute h-[70%] bg-[#7C5CFC] rounded text-[10px] text-white font-medium flex items-center px-2 cursor-pointer border shadow-sm overflow-hidden top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClip?.id === clip.id ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-125 shadow-lg z-40 border-transparent' : 'border-[#6A4DF0] z-10 hover:brightness-110'}`}
+                                                        className={`absolute h-[70%] bg-[#7C5CFC] rounded text-[10px] text-white font-medium flex items-center px-2 cursor-grab border shadow-sm overflow-hidden top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClipKeys.includes(makeClipKey(subTrackId, clip.id)) ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-125 shadow-lg z-40 border-transparent' : 'border-[#6A4DF0] z-10 hover:brightness-110'}`}
                                                         style={{
                                                             left: `${clip.startPos * GRID_WIDTH}px`,
                                                             width: `${clip.length * GRID_WIDTH}px`,
                                                         }}
                                                     >
+                                                        <div
+                                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize bg-white/20 hover:bg-white/40"
+                                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, subTrackId, clip, 'left')}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
                                                         <span className="truncate">{clip.name}</span>
+                                                        <div
+                                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-white/20 hover:bg-white/40"
+                                                            onMouseDown={(e) => handleResizeHandleMouseDown(e, subTrackId, clip, 'right')}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
                                                     </div>
                                                 ))}
                                             </div>

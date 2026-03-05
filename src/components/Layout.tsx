@@ -450,6 +450,69 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     });
   };
 
+  const handleBatchUpdateClips = (updates: { trackId: string, clipId: string, startPos?: number, length?: number }[]) => {
+    if (!updates || updates.length === 0) return;
+
+    const updateMap = new Map(updates.map((u) => [`${u.trackId}::${u.clipId}`, u]));
+
+    setTracks((currentTracks) => {
+      return currentTracks.map((track) => {
+        let changed = false;
+        let nextTrack = track;
+
+        if (track.clips) {
+          const nextClips = track.clips.map((clip: any) => {
+            const update = updateMap.get(`${track.id}::${clip.id}`);
+            if (!update) return clip;
+            changed = true;
+            return {
+              ...clip,
+              ...(typeof update.startPos === 'number' ? { startPos: update.startPos } : {}),
+              ...(typeof update.length === 'number' ? { length: update.length } : {})
+            };
+          });
+          if (changed) nextTrack = { ...nextTrack, clips: nextClips };
+        }
+
+        if (track.type === 'character' && track.subTracks) {
+          const nextSubTracks = track.subTracks.map((sub: any) => {
+            if (!sub.clips) return sub;
+            const subTrackId = `${track.id}-${sub.name}`;
+            let subChanged = false;
+            const nextSubClips = sub.clips.map((clip: any) => {
+              const update = updateMap.get(`${subTrackId}::${clip.id}`);
+              if (!update) return clip;
+              subChanged = true;
+              changed = true;
+              return {
+                ...clip,
+                ...(typeof update.startPos === 'number' ? { startPos: update.startPos } : {}),
+                ...(typeof update.length === 'number' ? { length: update.length } : {})
+              };
+            });
+            return subChanged ? { ...sub, clips: nextSubClips } : sub;
+          });
+          if (changed) nextTrack = { ...nextTrack, subTracks: nextSubTracks };
+        }
+
+        return nextTrack;
+      });
+    });
+
+    setSelectedClip((prev: any) => {
+      if (!prev) return prev;
+      const prevClipId = prev.clipId || prev.id;
+      const key = `${prev.trackId}::${prevClipId}`;
+      const update = updateMap.get(key);
+      if (!update) return prev;
+      return {
+        ...prev,
+        ...(typeof update.startPos === 'number' ? { startPos: update.startPos } : {}),
+        ...(typeof update.length === 'number' ? { length: update.length } : {})
+      };
+    });
+  };
+
   const handleEditClipRequest = (trackId: string, clipId: string) => {
     // Find the clip name and category
     let clipName = '';
@@ -693,6 +756,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         setSelectedClip={setSelectedClip}
         closeEditPanel={closeEditPanel}
         timelineHeight={timelineHeight}
+        onBatchUpdateClips={handleBatchUpdateClips}
       />
     </div >
   );
