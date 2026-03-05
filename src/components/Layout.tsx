@@ -673,9 +673,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   setPanelMode('replace');
                 }}
                 onApply={() => {
+                  if (targetClip?.trackId && (targetClip?.clipId || targetClip?.id) && targetClip?.name) {
+                    handleReplaceClip(targetClip.trackId, targetClip.clipId || targetClip.id, targetClip.name);
+                  }
                   setPanelMode('default');
                   setTargetClip(null);
-                  console.log("Edit properties applied");
+                  setPendingClip(null);
                 }}
                 selectedClip={selectedClip}
                 setSelectedClip={setSelectedClip}
