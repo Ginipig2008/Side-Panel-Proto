@@ -3,7 +3,7 @@
 import Layout from "@/components/Layout";
 import { User, Eye, Camera, Users, Video, Grid, LogOut } from "lucide-react";
 
-const Viewport = ({ tracks = [], errorMessage = null, panelMode = 'default', targetClip = null, isCameraView = false, setFocusedTrackId, closeEditPanel, setPanelMode, setTargetClip, selectedClip }: any) => {
+const Viewport = ({ tracks = [], errorMessage = null, panelMode = 'default', targetClip = null, isCameraView = false, setFocusedTrackId, closeEditPanel, setPanelMode, setTargetClip, selectedClip, activeAvatarClipState = {} }: any) => {
   const characters = tracks.filter((t: any) => t.type !== 'system');
 
   // 방어 코드: Layout에서 계산된 isCameraView 이외에도 Viewport 내부에서 직접 targetClip을 보고 안전하게 재계산합니다.
@@ -59,21 +59,32 @@ const Viewport = ({ tracks = [], errorMessage = null, panelMode = 'default', tar
           <p className="text-white/80 text-lg font-medium drop-shadow-sm">현재 씬에 캐릭터가 없습니다.</p>
         ) : (
           characters.map((char: any) => (
-            <div
-              key={char.id}
-              onClick={() => setFocusedTrackId?.(char.id)}
-              className="flex flex-col items-center justify-center w-36 h-44 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/40 hover:shadow-2xl hover:border-[#7C5CFC]/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
-            >
-              <div className="w-16 h-16 rounded-full bg-gray-100 flex flex-col items-center justify-center mb-4 text-gray-500 border border-gray-200 shadow-inner">
-                <User size={32} strokeWidth={1.5} />
-              </div>
-              <span className="font-bold text-gray-800 text-sm truncate w-full text-center px-3 tracking-tight">
-                {char.name}
-              </span>
-              <span className="text-[10px] text-[#7C5CFC] font-semibold mt-1.5 uppercase tracking-widest bg-[#7C5CFC]/10 px-2.5 py-0.5 rounded-full">
-                Avatar
-              </span>
-            </div>
+            (() => {
+              const avatarState = activeAvatarClipState[char.id] || {};
+              const actionName = avatarState.action?.name || "Idle";
+              const dialogueName = avatarState.dialogue?.name || "-";
+              return (
+                <div
+                  key={char.id}
+                  onClick={() => setFocusedTrackId?.(char.id)}
+                  className="flex flex-col items-center justify-center w-36 h-44 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/40 hover:shadow-2xl hover:border-[#7C5CFC]/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                >
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex flex-col items-center justify-center mb-4 text-gray-500 border border-gray-200 shadow-inner">
+                    <User size={32} strokeWidth={1.5} />
+                  </div>
+                  <span className="font-bold text-gray-800 text-sm truncate w-full text-center px-3 tracking-tight">
+                    {char.name}
+                  </span>
+                  <span className="text-[10px] text-[#7C5CFC] font-semibold mt-1.5 uppercase tracking-widest bg-[#7C5CFC]/10 px-2.5 py-0.5 rounded-full">
+                    Avatar
+                  </span>
+                  <div className="mt-2 px-2 w-full space-y-0.5">
+                    <p className="text-[10px] text-gray-600 truncate text-center">Action: {actionName}</p>
+                    <p className="text-[10px] text-gray-500 truncate text-center">Dialogue: {dialogueName}</p>
+                  </div>
+                </div>
+              );
+            })()
           ))
         )}
       </div>

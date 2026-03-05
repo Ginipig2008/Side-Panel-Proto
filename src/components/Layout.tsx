@@ -603,6 +603,36 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [tracks]);
 
   const isCameraView = (panelMode === 'edit' || panelMode === 'replace') && (targetClip?.category === 'Camera' || targetClip?.trackId === 'camera');
+  const activeAvatarClipState = React.useMemo(() => {
+    const isClipActiveAtPlayhead = (clip: any) => {
+      if (!clip) return false;
+      return playheadPos >= clip.startPos && playheadPos < (clip.startPos + clip.length);
+    };
+
+    const getActiveClipInSubTrack = (subTrack: any) => {
+      if (!subTrack?.clips) return null;
+      return subTrack.clips.find((clip: any) => isClipActiveAtPlayhead(clip)) || null;
+    };
+
+    const result: Record<string, any> = {};
+    tracks.forEach((track) => {
+      if (track.type !== 'character') return;
+
+      const subTracks = track.subTracks || [];
+      const actionTrack = subTracks.find((sub: any) => sub.name?.toLowerCase() === 'action');
+      const dialogueTrack = subTracks.find((sub: any) => sub.name?.toLowerCase() === 'dialogue');
+      const facialTrack = subTracks.find((sub: any) => sub.name?.toLowerCase() === 'facial');
+      const lookTrack = subTracks.find((sub: any) => sub.name?.toLowerCase() === 'look');
+
+      result[track.id] = {
+        action: getActiveClipInSubTrack(actionTrack),
+        dialogue: getActiveClipInSubTrack(dialogueTrack),
+        facial: getActiveClipInSubTrack(facialTrack),
+        look: getActiveClipInSubTrack(lookTrack)
+      };
+    });
+    return result;
+  }, [tracks, playheadPos]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-white overflow-hidden">
@@ -713,6 +743,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   pendingClip,
                   setPendingClip,
                   isCameraView,
+                  activeAvatarClipState,
                   closeEditPanel,
                   selectedClip
                 } as any);
