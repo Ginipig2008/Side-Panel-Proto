@@ -570,6 +570,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     });
 
     setTargetClip({ trackId, clipId, name: clipName, category });
+    setPendingClip(null);
     setPanelMode('replace');
     setActiveTab(category.toLowerCase()); // Open corresponding panel context
   };
@@ -603,6 +604,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [tracks]);
 
   const isCameraView = (panelMode === 'edit' || panelMode === 'replace') && (targetClip?.category === 'Camera' || targetClip?.trackId === 'camera');
+  const isContextPanelOpen = (panelMode === 'edit' || panelMode === 'replace') && !!targetClip;
+  const handleCloseContextPanel = () => {
+    setPanelMode('default');
+    setTargetClip(null);
+    setPendingClip(null);
+    setActiveTab(previousTab);
+  };
   const activeAvatarClipState = React.useMemo(() => {
     const isClipActiveAtPlayhead = (clip: any) => {
       if (!clip) return false;
@@ -643,7 +651,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Side Panel - 320px */}
         {activeTab && (
-          <aside className={`w-[320px] flex-shrink-0 bg-white overflow-hidden flex flex-col relative transition-all duration-300 ${panelMode === 'edit' || panelMode === 'replace' || (panelMode === 'preview' && targetClip) ? 'm-4 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.15)] ring-1 ring-black/5 z-30' : 'border-r border-gray-200 z-20'}`}>
+          <aside className={`w-[320px] flex-shrink-0 bg-white overflow-hidden flex flex-col relative border-r border-gray-200 transition-all duration-300 ${panelMode === 'edit' || panelMode === 'replace' || (panelMode === 'preview' && targetClip) ? 'rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.15)] ring-1 ring-black/5 z-30' : 'z-20'}`}>
             {/* Dim Overlay for Camera Edit/Replace */}
             {(panelMode === 'edit' || panelMode === 'replace') && targetClip?.category === 'Camera' && selectedClip && selectedClip.id !== (targetClip.clipId || targetClip.id) && (
               <div
@@ -674,7 +682,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               />
             ) : activeTab === 'action' ? (
               <ActionPanel
-                onClose={() => toggleSidebar('action')}
+                onClose={handleCloseContextPanel}
+                showCloseButton={isContextPanelOpen}
                 onAddClip={handleAddClip}
                 onReplaceClip={handleReplaceClip}
                 panelMode={panelMode}
@@ -682,6 +691,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 targetClip={targetClip}
                 setTargetClip={setTargetClip}
                 pendingClip={pendingClip}
+                setPendingClip={setPendingClip}
                 selectedClip={selectedClip}
                 setSelectedClip={setSelectedClip}
                 onCancelPreview={handleCancelPreview}
@@ -691,7 +701,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               />
             ) : activeTab === 'dialogue' ? (
               <DialoguePanel
-                onClose={() => toggleSidebar('dialogue')}
+                onClose={handleCloseContextPanel}
+                showCloseButton={isContextPanelOpen}
                 allDialogueClips={allDialogueClips}
                 tracks={tracks}
                 handleAddDialogueClip={handleAddDialogueClip}
@@ -699,9 +710,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 setSelectedClip={setSelectedClip}
               />
             ) : activeTab === 'camera' ? (
-              <CameraPanel onClose={() => toggleSidebar('camera')} onAddClip={handleAddClip} onReplaceClip={handleReplaceClip} panelMode={panelMode} setPanelMode={setPanelMode} targetClip={targetClip} setTargetClip={setTargetClip} pendingClip={pendingClip} setPendingClip={setPendingClip} selectedClip={selectedClip} setSelectedClip={setSelectedClip} onCancelPreview={handleCancelPreview} onApplyPreview={handleApplyPreview} handleAddDialogueClip={handleAddDialogueClip} allDialogueClips={allDialogueClips} />
+              <CameraPanel onClose={handleCloseContextPanel} showCloseButton={isContextPanelOpen} onAddClip={handleAddClip} onReplaceClip={handleReplaceClip} panelMode={panelMode} setPanelMode={setPanelMode} targetClip={targetClip} setTargetClip={setTargetClip} pendingClip={pendingClip} setPendingClip={setPendingClip} selectedClip={selectedClip} setSelectedClip={setSelectedClip} onCancelPreview={handleCancelPreview} onApplyPreview={handleApplyPreview} handleAddDialogueClip={handleAddDialogueClip} allDialogueClips={allDialogueClips} />
             ) : activeTab === 'facial' ? (
-              <FacialPanel onClose={() => toggleSidebar('facial')} onAddClip={handleAddClip} onReplaceClip={handleReplaceClip} panelMode={panelMode} setPanelMode={setPanelMode} targetClip={targetClip} setTargetClip={setTargetClip} pendingClip={pendingClip} selectedClip={selectedClip} setSelectedClip={setSelectedClip} onCancelPreview={handleCancelPreview} onApplyPreview={handleApplyPreview} handleAddDialogueClip={handleAddDialogueClip} allDialogueClips={allDialogueClips} />
+              <FacialPanel onClose={handleCloseContextPanel} showCloseButton={isContextPanelOpen} onAddClip={handleAddClip} onReplaceClip={handleReplaceClip} panelMode={panelMode} setPanelMode={setPanelMode} targetClip={targetClip} setTargetClip={setTargetClip} pendingClip={pendingClip} setPendingClip={setPendingClip} selectedClip={selectedClip} setSelectedClip={setSelectedClip} onCancelPreview={handleCancelPreview} onApplyPreview={handleApplyPreview} handleAddDialogueClip={handleAddDialogueClip} allDialogueClips={allDialogueClips} />
             ) : activeTab === 'character' ? (
               <CharacterPanel onClose={() => toggleSidebar('character')} onAddCharacter={handleAddCharacter} handleAddDialogueClip={handleAddDialogueClip} allDialogueClips={allDialogueClips} selectedClip={selectedClip} setSelectedClip={setSelectedClip} />
             ) : (

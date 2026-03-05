@@ -4,6 +4,7 @@ import { facialData, FacialDataNode } from '../data/facialData';
 
 export interface FacialPanelProps {
     onClose?: () => void;
+    showCloseButton?: boolean;
     onAddClip?: (itemName: string, category?: string) => any;
     onReplaceClip?: (trackId: string, clipId: string, newItemName: string) => void;
     panelMode?: 'default' | 'edit' | 'replace' | 'preview';
@@ -20,7 +21,7 @@ export interface FacialPanelProps {
     setSelectedClip?: (clip: any) => void;
 }
 
-const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplaceClip, panelMode = 'default', setPanelMode, targetClip, setTargetClip, pendingClip, setPendingClip, selectedClip, setSelectedClip, onCancelPreview, onApplyPreview, handleAddDialogueClip, allDialogueClips }) => {
+const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, showCloseButton = false, onAddClip, onReplaceClip, panelMode = 'default', setPanelMode, targetClip, setTargetClip, pendingClip, setPendingClip, selectedClip, setSelectedClip, onCancelPreview, onApplyPreview, handleAddDialogueClip, allDialogueClips }) => {
     const [facialPath, setFacialPath] = useState<FacialDataNode[]>([]);
 
     const handleBack = () => {
@@ -64,22 +65,33 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
     return (
         <div className="h-full flex flex-col bg-white">
             {/* Header */}
-            <div className="h-14 border-b border-gray-100 flex items-center px-4 justify-between gap-2 flex-shrink-0">
+            <div className="border-b border-gray-100 px-4 py-3 flex-shrink-0 space-y-2">
+                <div className="h-6 flex items-center justify-between">
+                    <h2 className="font-semibold text-gray-800 text-base">Facial</h2>
+                    {showCloseButton && onClose && (
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
+                </div>
                 {facialPath.length > 0 ? (
-                    <div className="flex items-center gap-2 flex-1 relative">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={handleBack}
                             className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
                         >
                             <ChevronLeft size={20} />
                         </button>
-                        <span className="font-semibold text-gray-800 text-base truncate flex items-center gap-2">
+                        <span className="font-medium text-gray-700 text-sm truncate flex items-center gap-2">
                             <Smile size={16} className="text-[#7C5CFC]" />
                             {currentFolder?.name}
                         </span>
                     </div>
                 ) : (
-                    <div className="relative flex-1">
+                    <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                         <input
                             type="text"
@@ -88,31 +100,9 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
                         />
                     </div>
                 )}
-                {onClose && (
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                    >
-                        <X size={18} />
-                    </button>
-                )}
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-                {/* Banner */}
-                <div className="w-full p-4 rounded-xl bg-gradient-to-r from-[#7C5CFC] to-[#6A4DF0] text-white shadow-lg relative overflow-hidden group cursor-pointer transition-transform duration-200 hover:scale-[1.02]">
-                    <div className="relative z-10">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 mb-2 backdrop-blur-sm">
-                            EXPRESSIONS
-                        </span>
-                        <h3 className="font-semibold text-lg leading-tight">Emotional Depth</h3>
-                        <p className="text-white/80 text-xs mt-1">Bring characters to life</p>
-                    </div>
-                    <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-1/4 translate-y-1/4">
-                        <div className="w-24 h-24 rounded-full bg-white blur-xl" />
-                    </div>
-                </div>
-
                 {/* Grid */}
                 <div>
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -121,7 +111,12 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
                     <div className="grid grid-cols-2 gap-3">
                         {(currentFolder ? currentFolder.children : facialData)?.map((item: FacialDataNode) => {
                             const isLeaf = !item.children || item.children.length === 0;
-                            const isSelected = panelMode === 'replace' && targetClip?.name === item.name;
+                            const isCurrent = panelMode === 'replace'
+                                ? targetClip?.name === item.name
+                                : false;
+                            const isPending = panelMode === 'replace'
+                                ? pendingClip?.name === item.name
+                                : false;
 
                             return (
                                 <button
@@ -137,9 +132,9 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
                                                 return;
                                             }
 
-                                            // 2. Replace 모드일 경우: 클립 교체 실행
-                                            if (panelMode === 'replace' && targetClip && onReplaceClip) {
-                                                onReplaceClip(targetClip.trackId, targetClip.clipId, item.name);
+                                            // 2. Replace 모드일 경우: 선택만 하고 하단 Apply로 확정
+                                            if (panelMode === 'replace' && targetClip) {
+                                                if (setPendingClip) setPendingClip({ name: item.name, category: 'Facial' });
                                                 return;
                                             }
 
@@ -165,10 +160,20 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
                                     </div>
                                     <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
 
-                                    {/* Select Indicator */}
-                                    {isSelected && (
+                                    {/* Replace Indicators */}
+                                    {isCurrent && (
+                                        <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-blue-500 text-white text-[9px] font-bold tracking-wide shadow-sm">
+                                            CURRENT
+                                        </div>
+                                    )}
+                                    {isPending && (
                                         <div className="absolute top-2 right-2 w-5 h-5 bg-[#7C5CFC] rounded-full flex items-center justify-center shadow-md">
                                             <Check size={12} className="text-white" strokeWidth={3} />
+                                        </div>
+                                    )}
+                                    {isPending && (
+                                        <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-[#7C5CFC] text-white text-[9px] font-bold tracking-wide shadow-sm">
+                                            NEW
                                         </div>
                                     )}
                                 </button>
@@ -177,6 +182,22 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
                     </div>
                 </div>
             </div>
+            {panelMode === 'replace' && targetClip && (
+                <div className="border-t border-gray-100 p-4 flex-shrink-0 bg-white">
+                    <button
+                        onClick={() => {
+                            if (!pendingClip || !onReplaceClip) return;
+                            onReplaceClip(targetClip.trackId, targetClip.clipId, pendingClip.name);
+                            if (setPendingClip) setPendingClip(null);
+                            if (onClose) onClose();
+                        }}
+                        disabled={!pendingClip}
+                        className="w-full py-2.5 rounded-lg bg-[#7C5CFC] text-sm font-medium text-white hover:bg-[#6A4DF0] transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                        Apply
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

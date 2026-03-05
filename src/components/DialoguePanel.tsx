@@ -3,6 +3,7 @@ import { X, User, Plus } from 'lucide-react';
 
 interface DialoguePanelProps {
     onClose?: () => void;
+    showCloseButton?: boolean;
     allDialogueClips?: any[];
     tracks?: any[];
     handleAddDialogueClip?: (characterTrackId: string) => void;
@@ -26,7 +27,7 @@ const formatTimeRange = (startPos: number, length: number) => {
     return `00:${pad(startMins)}:${pad(startSecs)}-00:${pad(endMins)}:${pad(endSecs)}`;
 };
 
-const DialoguePanel: React.FC<DialoguePanelProps> = ({ onClose, allDialogueClips = [], tracks = [], handleAddDialogueClip }) => {
+const DialoguePanel: React.FC<DialoguePanelProps> = ({ onClose, showCloseButton = false, allDialogueClips = [], tracks = [], handleAddDialogueClip }) => {
     const [isPending, setIsPending] = useState(false);
 
     const characterTracks = tracks.filter(t => t.type === 'character');
@@ -42,16 +43,18 @@ const DialoguePanel: React.FC<DialoguePanelProps> = ({ onClose, allDialogueClips
     return (
         <div className="h-full flex flex-col bg-white">
             {/* Header */}
-            <div className="h-14 border-b border-gray-100 flex items-center px-4 justify-between flex-shrink-0">
-                <span className="font-semibold text-gray-800 text-base">Dialogue</span>
-                {onClose && (
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                    >
-                        <X size={18} />
-                    </button>
-                )}
+            <div className="border-b border-gray-100 px-4 py-3 flex-shrink-0">
+                <div className="h-6 flex items-center justify-between">
+                    <h2 className="font-semibold text-gray-800 text-base">Dialogue</h2>
+                    {showCloseButton && onClose && (
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Content List */}

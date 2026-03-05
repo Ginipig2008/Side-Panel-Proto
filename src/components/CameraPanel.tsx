@@ -14,6 +14,7 @@ const SHOT_TYPES = [
 
 interface CameraPanelProps {
     onClose?: () => void;
+    showCloseButton?: boolean;
     onAddClip?: (itemName: string, category?: string) => any;
     onReplaceClip?: (trackId: string, clipId: string, newItemName: string) => void;
     panelMode?: 'default' | 'edit' | 'replace' | 'preview';
@@ -30,12 +31,23 @@ interface CameraPanelProps {
     setSelectedClip?: (clip: any) => void;
 }
 
-const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, onAddClip, onReplaceClip, panelMode, setPanelMode, targetClip, setTargetClip, pendingClip, setPendingClip, selectedClip, setSelectedClip, onCancelPreview, onApplyPreview, handleAddDialogueClip, allDialogueClips }) => {
+const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, showCloseButton = false, onAddClip, onReplaceClip, panelMode, setPanelMode, targetClip, setTargetClip, pendingClip, setPendingClip, selectedClip, setSelectedClip, onCancelPreview, onApplyPreview, handleAddDialogueClip, allDialogueClips }) => {
     return (
         <div className="h-full flex flex-col bg-white">
             {/* Header */}
-            <div className="h-14 border-b border-gray-100 flex items-center px-4 justify-between gap-2 flex-shrink-0">
-                <div className="relative flex-1">
+            <div className="border-b border-gray-100 px-4 py-3 flex-shrink-0 space-y-2">
+                <div className="h-6 flex items-center justify-between">
+                    <h2 className="font-semibold text-gray-800 text-base">Camera</h2>
+                    {showCloseButton && onClose && (
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
+                </div>
+                <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
                         type="text"
@@ -43,15 +55,6 @@ const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, onAddClip, onReplace
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-1.5 text-sm outline-none focus:border-[#7C5CFC] transition-colors duration-200"
                     />
                 </div>
-                {/* Camera panel is default, so close button might be optional or disabled, but keeping for consistency if passed */}
-                {onClose && (
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                    >
-                        <X size={18} />
-                    </button>
-                )}
             </div>
 
             {panelMode === 'preview' ? (
@@ -80,30 +83,27 @@ const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, onAddClip, onReplace
                 </div>
             ) : (
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-                    {/* Banner */}
-                    <div className="w-full p-4 rounded-xl bg-gradient-to-r from-[#7C5CFC] to-[#6A4DF0] text-white shadow-lg relative overflow-hidden group cursor-pointer transition-transform duration-200 hover:scale-[1.02]">
-                        <div className="relative z-10">
-                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 mb-2 backdrop-blur-sm">
-                                NEW FEATURE
-                            </span>
-                            <h3 className="font-semibold text-lg leading-tight">Cinematic Angles</h3>
-                            <p className="text-white/80 text-xs mt-1">Explore professional compositions</p>
-                        </div>
-                        <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-1/4 translate-y-1/4">
-                            <div className="w-24 h-24 rounded-full bg-white blur-xl" />
-                        </div>
-                    </div>
-
                     {/* Shot Type Grid */}
                     <div>
                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Shot Types</h3>
                         <div className="grid grid-cols-2 gap-3">
                             {SHOT_TYPES.map((shot) => {
-                                const isSelected = panelMode === 'replace' && targetClip?.name === shot.label;
+                                const isCurrent = panelMode === 'replace'
+                                    ? targetClip?.name === shot.label
+                                    : false;
+                                const isPending = panelMode === 'replace'
+                                    ? pendingClip?.name === shot.label
+                                    : false;
                                 return (
                                     <button
                                         key={shot.id}
                                         onClick={() => {
+                                            if (panelMode === 'replace' && targetClip) {
+                                                if (setPendingClip) {
+                                                    setPendingClip({ name: shot.label, category: 'Camera' });
+                                                }
+                                                return;
+                                            }
                                             if (setPendingClip) {
                                                 setPendingClip({ name: shot.label, category: 'Camera' });
                                             }
@@ -128,10 +128,20 @@ const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, onAddClip, onReplace
                                         {/* Hover Effect Overlay */}
                                         <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
 
-                                        {/* Select Indicator */}
-                                        {isSelected && (
+                                        {/* Replace Indicators */}
+                                        {isCurrent && (
+                                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-blue-500 text-white text-[9px] font-bold tracking-wide shadow-sm">
+                                                CURRENT
+                                            </div>
+                                        )}
+                                        {isPending && (
                                             <div className="absolute top-2 right-2 w-5 h-5 bg-[#7C5CFC] rounded-full flex items-center justify-center shadow-md">
                                                 <Check size={12} className="text-white" strokeWidth={3} />
+                                            </div>
+                                        )}
+                                        {isPending && (
+                                            <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-[#7C5CFC] text-white text-[9px] font-bold tracking-wide shadow-sm">
+                                                NEW
                                             </div>
                                         )}
                                     </button>
@@ -139,6 +149,22 @@ const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, onAddClip, onReplace
                             })}
                         </div>
                     </div>
+                </div>
+            )}
+            {panelMode === 'replace' && targetClip && (
+                <div className="border-t border-gray-100 p-4 flex-shrink-0 bg-white">
+                    <button
+                        onClick={() => {
+                            if (!pendingClip || !onReplaceClip) return;
+                            onReplaceClip(targetClip.trackId, targetClip.clipId, pendingClip.name);
+                            if (setPendingClip) setPendingClip(null);
+                            if (onClose) onClose();
+                        }}
+                        disabled={!pendingClip}
+                        className="w-full py-2.5 rounded-lg bg-[#7C5CFC] text-sm font-medium text-white hover:bg-[#6A4DF0] transition-colors shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                        Apply
+                    </button>
                 </div>
             )}
         </div>

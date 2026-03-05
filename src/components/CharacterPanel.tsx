@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 const CHARACTERS = [
     { id: 'vrm', label: 'VRM', count: 82 },
@@ -25,8 +25,11 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ onClose, onAddCharacter
     return (
         <div className="h-full flex flex-col bg-white">
             {/* Header */}
-            <div className="h-14 border-b border-gray-100 flex items-center px-4 justify-between gap-2 flex-shrink-0">
-                <div className="relative flex-1">
+            <div className="border-b border-gray-100 px-4 py-3 flex-shrink-0 space-y-2">
+                <div className="h-6 flex items-center">
+                    <h2 className="font-semibold text-gray-800 text-base">Character</h2>
+                </div>
+                <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
                         type="text"
@@ -34,29 +37,9 @@ const CharacterPanel: React.FC<CharacterPanelProps> = ({ onClose, onAddCharacter
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-1.5 text-sm outline-none focus:border-[#7C5CFC] transition-colors duration-200"
                     />
                 </div>
-                <button
-                    onClick={onClose}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                >
-                    <X size={18} />
-                </button>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-                {/* Banner */}
-                <div className="w-full p-4 rounded-xl bg-gradient-to-r from-[#7C5CFC] to-[#6A4DF0] text-white shadow-lg relative overflow-hidden group cursor-pointer transition-transform duration-200 hover:scale-[1.02]">
-                    <div className="relative z-10">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 mb-2 backdrop-blur-sm">
-                            AVATARS
-                        </span>
-                        <h3 className="font-semibold text-lg leading-tight">Select Your Hero</h3>
-                        <p className="text-white/80 text-xs mt-1">Diverse styles and personalities</p>
-                    </div>
-                    <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-1/4 translate-y-1/4">
-                        <div className="w-24 h-24 rounded-full bg-white blur-xl" />
-                    </div>
-                </div>
-
                 {/* Grid */}
                 <div>
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Characters</h3>
