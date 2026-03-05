@@ -53,6 +53,7 @@ const FacialPanel: React.FC<FacialPanelProps> = ({ onClose, onAddClip, onReplace
 
             findNodePath(facialData, []);
             if (foundPath.length > 0) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setFacialPath(foundPath);
             }
         }

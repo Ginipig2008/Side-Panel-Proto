@@ -593,21 +593,21 @@ const Timeline: React.FC<TimelineProps> = ({ tracks: externalTracks, onAddCharac
 
                                                 {/* Render clips for Sub-track */}
                                                 {sub.clips?.map((clip: any) => (
-                                                <div
-                                                    key={clip.id}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleClipClick(e, subTrackId, clip);
-                                                    }}
-                                                    onContextMenu={(e) => {
-                                                        handleClipContextMenu(e, subTrackId, clip);
-                                                    }}
-                                                    className={`absolute h-[70%] bg-[#7C5CFC] rounded text-[10px] text-white font-medium flex items-center px-2 cursor-pointer border shadow-sm overflow-hidden top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClip?.id === clip.id ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-125 shadow-lg z-40 border-transparent' : 'border-[#6A4DF0] z-10 hover:brightness-110'}`}
-                                                    style={{
-                                                        left: `${clip.startPos * GRID_WIDTH}px`,
-                                                        width: `${clip.length * GRID_WIDTH}px`,
-                                                    }}
-                                                >
+                                                    <div
+                                                        key={clip.id}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleClipClick(e, subTrackId, clip);
+                                                        }}
+                                                        onContextMenu={(e) => {
+                                                            handleClipContextMenu(e, subTrackId, clip);
+                                                        }}
+                                                        className={`absolute h-[70%] bg-[#7C5CFC] rounded text-[10px] text-white font-medium flex items-center px-2 cursor-pointer border shadow-sm overflow-hidden top-1/2 -translate-y-1/2 transition-all duration-200 ${selectedClip?.id === clip.id ? 'ring-2 ring-[#FFD700] ring-offset-1 ring-offset-[#f8fafc] scale-[1.03] brightness-125 shadow-lg z-40 border-transparent' : 'border-[#6A4DF0] z-10 hover:brightness-110'}`}
+                                                        style={{
+                                                            left: `${clip.startPos * GRID_WIDTH}px`,
+                                                            width: `${clip.length * GRID_WIDTH}px`,
+                                                        }}
+                                                    >
                                                         <span className="truncate">{clip.name}</span>
                                                     </div>
                                                 ))}

@@ -71,12 +71,6 @@ const CameraPanel: React.FC<CameraPanelProps> = ({ onClose, onAddClip, onReplace
 
                     <div className="mt-auto pt-4 flex gap-3 border-t border-gray-100 pb-2">
                         <button
-                            onClick={onCancelPreview}
-                            className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
                             onClick={onApplyPreview}
                             className="flex-1 py-2.5 rounded-lg bg-[#7C5CFC] text-sm font-medium text-white hover:bg-[#6A4DF0] transition-colors shadow-sm"
                         >

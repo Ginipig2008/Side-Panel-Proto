@@ -441,7 +441,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Side Panel - 320px */}
         {activeTab && (
-          <aside className="w-[320px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col relative z-20 transition-all duration-300">
+          <aside className={`w-[320px] flex-shrink-0 bg-white overflow-hidden flex flex-col relative transition-all duration-300 ${panelMode === 'edit' || panelMode === 'replace' || (panelMode === 'preview' && targetClip) ? 'm-4 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.15)] ring-1 ring-black/5 z-30' : 'border-r border-gray-200 z-20'}`}>
             {/* Dim Overlay for Camera Edit/Replace */}
             {(panelMode === 'edit' || panelMode === 'replace') && targetClip?.category === 'Camera' && selectedClip && selectedClip.id !== (targetClip.clipId || targetClip.id) && (
               <div
